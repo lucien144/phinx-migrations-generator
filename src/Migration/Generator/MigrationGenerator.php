@@ -131,9 +131,17 @@ class MigrationGenerator
     protected function saveMigrationFile($name, $migration)
     {
         $migrationPath = $this->settings['migration_path'];
+        mkdir($migrationPath, 0777, TRUE);
+        mkdir("{$migrationPath}/tables", 0777, TRUE);
+        
         $migrationFile = sprintf('%s/%s_%s.php', $migrationPath, date('YmdHis'), $name);
         $this->output->writeln(sprintf('Generate migration file: %s', $migrationFile));
         file_put_contents($migrationFile, $migration);
+        
+        foreach ($this->generator->getTablesMigrations() as $tableName => $tablesMigration) {
+			$tableMigrationFile = sprintf('%s/tables/%s_%s.php', $migrationPath, date('YmdHis'), $tableName);
+			file_put_contents($tableMigrationFile, $tablesMigration);
+        }
     }
 
     /**
