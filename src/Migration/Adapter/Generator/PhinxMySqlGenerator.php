@@ -54,6 +54,12 @@ class PhinxMySqlGenerator
      * @var string
      */
     protected $ind3 = '            ';
+	
+	/**
+	 * Migrations for tables.
+	 * @var array
+	 */
+	private $_tables = [];
 
     /**
      * Concstructor
@@ -83,37 +89,30 @@ class PhinxMySqlGenerator
      */
     public function createMigration($name, $newSchema, $oldSchema)
     {
-        $output = array();
-        $output[] = '<?php';
-        $output[] = '';
-        $output[] = 'use Phinx\Migration\AbstractMigration;';
-        $output[] = 'use Phinx\Db\Adapter\MysqlAdapter;';
-        $output[] = '';
-        $output[] = sprintf('class %s extends AbstractMigration', $name);
-        $output[] = '{';
-        $output = $this->addChangeMethod($output, $newSchema, $oldSchema);
-        $output[] = '}';
-        $output[] = '';
-        $result = implode($this->nl, $output);
-        return $result;
+     	return $this->getMigrationTemplate($name, $this->getTableMigration([], $newSchema, $oldSchema));
     }
+	
+	
+	protected function getMigrationTemplate($name, $content)
+	{
+		$output = array();
+		$output[] = '<?php';
+		$output[] = '';
+		$output[] = 'use Phinx\Migration\AbstractMigration;';
+		$output[] = 'use Phinx\Db\Adapter\MysqlAdapter;';
+		$output[] = '';
+		$output[] = sprintf('class %s extends AbstractMigration', $name);
+		$output[] = '{';
+		$output[] = $this->ind . 'public function change()';
+		$output[] = $this->ind . '{';
+		$output[] = implode($this->nl, $content);
+		$output[] = $this->ind . '}';
+		$output[] = '}';
+		$output[] = '';
+		$result = implode($this->nl, $output);
+		return $result;
+	}
 
-    /**
-     * Generate code for change function.
-     *
-     * @param array $output Output
-     * @param array $new New schema
-     * @param array $old Old schema
-     * @return array Output
-     */
-    public function addChangeMethod($output, $new, $old)
-    {
-        $output[] = $this->ind . 'public function change()';
-        $output[] = $this->ind . '{';
-        $output = $this->getTableMigration($output, $new, $old);
-        $output[] = $this->ind . '}';
-        return $output;
-    }
 
     /**
      * Get table migration.
@@ -183,30 +182,40 @@ class PhinxMySqlGenerator
         if (empty($new['tables'])) {
             return $output;
         }
+        $i = 0;
         foreach ($new['tables'] as $tableName => $table) {
+        	$i++;
+			$tableOutput = [];
             if ($tableName == 'phinxlog') {
                 continue;
             }
             if (!isset($old['tables'][$tableName])) {
                 // create the table
-                $output[] = $this->getCreateTable($tableName);
+                $tableOutput[] = '';
+                $tableOutput[] = '';
+                $tableOutput[] = $this->ind2 . '/**';
+                $tableOutput[] = $this->ind2 . ' * Creating table: ' . $tableName;
+                $tableOutput[] = $this->ind2 . ' */';
+                $tableOutput[] = $this->getCreateTable($tableName);
             }
             if ($this->neq($new, $old, ['tables', $tableName, 'table', 'engine'])) {
-                $output[] = $this->getAlterTableEngine($tableName, $table['table']['engine']);
+                $tableOutput[] = $this->getAlterTableEngine($tableName, $table['table']['engine']);
             }
             if ($this->neq($new, $old, ['tables', $tableName, 'table', 'table_comment'])) {
-                $output[] = $this->getAlterTableComment($tableName, $table['table']['table_comment']);
+                $tableOutput[] = $this->getAlterTableComment($tableName, $table['table']['table_comment']);
             }
             if ($this->neq($new, $old, ['tables', $tableName, 'table', 'character_set_name'])) {
-                $output[] = $this->getAlterTableCharset($tableName, $table['table']['character_set_name']);
+                $tableOutput[] = $this->getAlterTableCharset($tableName, $table['table']['character_set_name']);
             }
             if ($this->neq($new, $old, ['tables', $tableName, 'table', 'table_collation'])) {
-                $output[] = $this->getAlterTableCollate($tableName, $table['table']['table_collation']);
+                $tableOutput[] = $this->getAlterTableCollate($tableName, $table['table']['table_collation']);
             }
 
-            $output = $this->getTableMigrationNewTablesColumns($output, $table, $tableName, $new, $old);
-            $output = $this->getTableMigrationOldTablesColumns($output, $tableName, $new, $old);
-            $output = $this->getTableMigrationIndexes($output, $table, $tableName, $new, $old);
+            $tableOutput = $this->getTableMigrationNewTablesColumns($tableOutput, $table, $tableName, $new, $old);
+            $tableOutput = $this->getTableMigrationOldTablesColumns($tableOutput, $tableName, $new, $old);
+            $tableOutput = $this->getTableMigrationIndexes($tableOutput, $table, $tableName, $new, $old);
+			$this->_tables[$tableName] = $this->getMigrationTemplate($tableName, $tableOutput);
+			$output = array_merge($output, $tableOutput);
         }
         return $output;
     }
@@ -1132,5 +1141,16 @@ class PhinxMySqlGenerator
             $array = $array[$part];
         }
         return $array;
+    }
+	
+	
+	/**
+	 * Get migrations for tables [tblName => migration]
+	 *
+	 * @return array
+	 */
+	public function getTablesMigrations()
+	{
+		return $this->_tables;
     }
 }
